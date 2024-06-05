@@ -4,10 +4,10 @@ namespace NotificationChannels\Log;
 
 use Exception;
 use Illuminate\Support\Facades\Log;
-use NotificationChannels\Log\Exceptions\CouldNotSendNotification;
+use Illuminate\Notifications\Notification;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Notifications\Events\NotificationFailed;
-use Illuminate\Notifications\Notification;
+use NotificationChannels\Log\Exceptions\CouldNotSendNotification;
 
 class LogChannel
 {
@@ -18,8 +18,6 @@ class LogChannel
 
     /**
      * LogChannel constructor.
-     *
-     * @param Dispatcher $events
      */
     public function __construct(Dispatcher $events)
     {
@@ -29,8 +27,7 @@ class LogChannel
     /**
      * Send the given notification.
      *
-     * @param mixed $notifiable
-     * @param \Illuminate\Notifications\Notification $notification
+     * @param  mixed  $notifiable
      *
      * @throws \NotificationChannels\Log\Exceptions\CouldNotSendNotification
      */
@@ -45,11 +42,19 @@ class LogChannel
 
             $message = $notification->toLog($notifiable);
 
-            if (! $message instanceof LogMessage) {
+            if (!$message instanceof LogMessage) {
                 throw CouldNotSendNotification::invalidMessageObject($message);
             }
 
-            Log::channel($logChannel)->debug($message->content);
+            $level = $this->getLogLevel();
+
+            $logger = Log::channel($logChannel);
+
+            if (method_exists($logger, $level)) {
+                $logger->$level($message->content);
+            } else {
+                $logger->debug($message->content);
+            }
         } catch (Exception $exception) {
             $event = new NotificationFailed($notifiable, $notification, 'log', ['message' => $exception->getMessage(), 'exception' => $exception]);
             if (function_exists('event')) { // Use event helper when possible to add Lumen support
@@ -65,6 +70,14 @@ class LogChannel
      */
     private function getLogChannel()
     {
-        return config('LOG_NOTIFICATIONS_CHANNEL', config('logging.default'));
+        return config('log-notification-channel.channel') ?? config('logging.default');
+    }
+
+    /**
+     * @return string
+     */
+    private function getLogLevel()
+    {
+        return config('log-notification-channel.level') ?? 'debug';
     }
 }
